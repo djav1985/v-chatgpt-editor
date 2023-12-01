@@ -1,10 +1,12 @@
 # docx_handler.py
 import os
-from dotenv import load_dotenv  # Load environment variables
-from docx import Document  # To process docx files
-
-from api import communicate_with_openai
 import re
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.shared import Inches
+from dotenv import load_dotenv
+from api import communicate_with_openai
+
 
 # Load the environment variables
 load_dotenv()
@@ -22,18 +24,25 @@ def split_into_sections(filename):
         current_tokens = 0
 
         for paragraph in doc.paragraphs:
-            # Process paragraph text and wrap in HTML tags
-            text = paragraph.text
+            text = paragraph.text.strip()
+            if not text:
+                continue
+
             if paragraph.style.name == 'Title':
                 text = f"<title>{text}</title>"
             elif paragraph.style.name.startswith('Heading'):
-                header_level = paragraph.style.name[-1]
+                header_level = re.findall(r'\d+', paragraph.style.name)[0]
                 text = f"<h{header_level}>{text}</h{header_level}>"
             else:
-                text = f"<p>{text}</p>"
-                # Check if the paragraph is centered and add <centered> tags
-                if paragraph.alignment == 1:  # 1 represents centered alignment
-                    text = f"<centered>{text}</centered>"
+                try:
+                    # Attempt to check alignment
+                    if paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER:
+                        text = f"<center>{text}</center>"
+                    else:
+                        text = f"<p>{text}</p>"
+                except:
+                    # Fallback to default if there's an error
+                    text = f"<p>{text}</p>"
 
             new_tokens = len(text.split())
             if current_tokens + new_tokens > max_tokens:
@@ -108,46 +117,47 @@ def process_manuscript():
     except Exception as e:
         raise Exception(f"Error processing manuscript: {e}")
 
-
 def merge_groups_and_save(filename):
-    """Merge the corrected texts from .new files and preserve formatting, headers, paragraphs, and more, save to a new DOCX file."""
+    """Merge and format texts from .new files into a DOCX file."""
     try:
-        tmp_dir = './tmp'
-        edited_filename = f"EDITED_{filename}"
+        input_dir = './tmp'
+        output_dir = './output'
+        edited_filename = os.path.join(output_dir, f"EDITED_{os.path.basename(filename)}")
         edited_doc = Document()
 
-        # Get a list of all .new files and sort them based on their numeric prefixes
-        new_files = sorted([f for f in os.listdir(tmp_dir) if f.endswith('.new')], key=lambda x: int(x.split('-')[0]))
+        new_files = sorted([f for f in os.listdir(input_dir) if f.endswith('.new')],
+                           key=lambda x: int(x.split('-')[0]))
 
         for new_file in new_files:
-            with open(os.path.join(tmp_dir, new_file), 'r') as section_file:
-                corrected_text = section_file.read()
+            with open(os.path.join(input_dir, new_file), 'r') as section_file:
+                corrected_text = section_file.read().splitlines()
 
-            # Process the corrected text and apply corresponding style
-            paragraphs = re.split(r'</?centered>', corrected_text)
-            for i, para_text in enumerate(paragraphs):
-                if i % 2 == 1:  # Check if it's enclosed in <centered> </centered> tags
-                    para = edited_doc.add_paragraph(para_text)
-                    para.alignment = 1  # Set alignment to centered
-                else:
-                    # Remove HTML tags and extract content
-                    para_text_without_tags = re.sub(r'<.*?>', '', para_text)
-                    para = edited_doc.add_paragraph(para_text_without_tags)
+            for line in corrected_text:
+                line = line.strip()
+                para = None  # Initialize para variable
 
-                    # Apply corresponding style based on the presence of headers
-                    if para_text.startswith('<title>'):
-                        para.style = 'Title'
-                    elif para_text.startswith('<h'):
-                        header_level = int(para_text[3])  # Extract header level from "<hX>"
-                        para.style = f'Heading {header_level}'
-                        # Add a page break before Header 1 (h1)
-                        if header_level == 1:
-                            edited_doc.add_page_break()
-                    else:
-                        para.style = 'Normal'
+                if line.startswith('<title>') and line.endswith('</title>'):
+                    edited_doc.add_heading(line.replace('<title>', '').replace('</title>', ''), level=1)
+                    para = edited_doc.paragraphs[-1]  # Get the last paragraph
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif line.startswith('<h1>') and line.endswith('</h1>'):
+                    edited_doc.add_page_break()
+                    edited_doc.add_heading(line.replace('<h1>', '').replace('</h1>', ''), level=1)
+                    para = edited_doc.paragraphs[-1]  # Get the last paragraph
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif line.startswith('<h2>') and line.endswith('</h2>'):
+                    edited_doc.add_heading(line.replace('<h2>', '').replace('</h2>', ''), level=2)
+                    para = edited_doc.paragraphs[-1]  # Get the last paragraph
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif line.startswith('<center>') and line.endswith('</center>'):
+                    para = edited_doc.add_paragraph(line.replace('<center>', '').replace('</center>', ''))
+                    para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                elif line.startswith('<p>') and line.endswith('</p>'):
+                    para = edited_doc.add_paragraph(line.replace('<p>', '').replace('</p>', ''))
+                    para.paragraph_format.first_line_indent = Inches(0.20)
 
         edited_doc.save(edited_filename)
         print(f"DOCX {edited_filename} saved.")
 
     except Exception as e:
-        raise Exception(f"Error merging and saving document: {e}")
+        raise Exception(f"Error in document merging and saving: {e}")

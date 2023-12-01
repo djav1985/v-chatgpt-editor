@@ -17,18 +17,18 @@ if __name__ == "__main__":
         print(f"Error: The file {args.filename} does not exist.")
     else:
         try:
-            # Load and split the manuscript into sections, creating .old files
-            sections = split_into_sections(args.filename)
-            print("Manuscript loaded and split into sections...")
-
-            # Process the manuscript sections and create .new files
-            corrected_manuscript = process_manuscript()
-            print("Processing manuscript completed...")
-
             if args.build:
-                # Merge corrections and save the edited manuscript
-                merge_groups_and_save()
+                # If both filename and build are provided, merge corrections and save the edited manuscript
+                merge_groups_and_save(args.filename)
                 print("Edited manuscript saved.")
+            else:
+                # If only filename is provided, load and split the manuscript into sections, creating .old files
+                sections = split_into_sections(args.filename)
+                print("Manuscript loaded and split into sections...")
+
+                # Process the manuscript sections and create .new files
+                corrected_manuscript = process_manuscript()
+                print("Processing manuscript completed...")
 
         except Exception as e:
             print(f"An error occurred: {e}")

@@ -16,6 +16,5 @@ if [ ! -d "venv" ]; then
     pip3 install -r requirements.txt
 else
     # If it exists, just activate the existing virtual environment.
-    echo "Activating existing Python virtual environment..."
-    source venv/bin/activate
+    echo "Everything is setup! Run source venv/bin/activate then python3 main.py --filename ./file.docx then to build python3 main.py --filename ./file.docx --build"
 fi

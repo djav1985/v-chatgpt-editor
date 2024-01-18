@@ -1,4 +1,4 @@
-docx2txt
+argparse
 python-docx
-requests
 python-dotenv
+beautifulsoup4

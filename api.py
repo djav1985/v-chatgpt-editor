@@ -12,14 +12,11 @@ load_dotenv()
 # Default values are provided if those variables are not declared in the .env file
 api_key = os.getenv('OPENAI_API_KEY')
 model = os.getenv('MODEL', 'gpt-4-1106-preview')
-user_prefix = os.getenv('USER_PREFIX', '')
-system_message = os.getenv('SYSTEM_MESSAGE', '')
-max_tokens = int(os.getenv('MAX_TOKENS', 4096))
 
 # Instantiate the OpenAI API client with the given API key
 client = OpenAI(api_key=api_key)
 
-def communicate_with_openai(section_text, completed_sections, total_sections):
+def communicate_with_openai(section_text, completed_sections, total_sections, max_tokens, system_message, user_prefix):
     """Function to communicate with OpenAI API."""
     try:
         # Prepare the user message

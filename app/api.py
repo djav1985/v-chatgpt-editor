@@ -1,6 +1,4 @@
 # api.py
-
-# Required libraries are imported
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -10,29 +8,40 @@ load_dotenv()
 
 # Retrieve the secret OpenAI API key and other important configurations from the environment variables
 # Default values are provided if those variables are not declared in the .env file
-api_key = os.getenv('OPENAI_API_KEY')
-model = os.getenv('MODEL', 'gpt-4-1106-preview')
+api_key = os.getenv("OPENAI_API_KEY")
+model = os.getenv("MODEL", "gpt-4-turbo")
 
 # Instantiate the OpenAI API client with the given API key
 client = OpenAI(api_key=api_key)
 
-def communicate_with_openai(section_text, completed_sections, total_sections, max_tokens, system_message, user_prefix):
+
+def communicate_with_openai(
+    section_text,
+    completed_sections,
+    total_sections,
+    max_tokens,
+    system_message,
+    user_prefix,
+):
     """Function to communicate with OpenAI API."""
     try:
         # Prepare the user message
         user_message = f"{user_prefix}: {section_text}"
 
         # Print the user message, completed and total sections
-        print(f"\nSending to OpenAI API: User Message: {user_message}\nCompleted Sections: {completed_sections} | Total Sections: {total_sections}")
+        print(
+            f"\nSending to OpenAI API: User Message: {user_message}\nCompleted Sections: {completed_sections} | Total Sections: {total_sections}"
+        )
 
         # Call the chat.completions API of OpenAI with essential parameters
         completion = client.chat.completions.create(
             model=model,
             messages=[
                 {"role": "system", "content": system_message},  # System message
-                {"role": "user", "content": user_message}  # User message
+                {"role": "user", "content": user_message},  # User message
             ],
-            max_tokens=max_tokens)  # Maximum number of tokens in the generated message
+            max_tokens=max_tokens,
+        )  # Maximum number of tokens in the generated message
 
         print(f"Entire API Response:\n{completion}")
 

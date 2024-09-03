@@ -2,3 +2,6 @@ argparse
 python-docx
 python-dotenv
 beautifulsoup4
+cohere
+openai
+pydantic

@@ -1,70 +1,59 @@
+# api.py
 import os
 from dotenv import load_dotenv
 from openai import OpenAI
-from typing import Optional
 
 # Load environment variables from .env file
 load_dotenv()
 
 # Retrieve the secret OpenAI API key and other important configurations from the environment variables
 # Default values are provided if those variables are not declared in the .env file
-PROJECT_ID: Optional[str] = os.getenv("OPENAI_PROJECT_ID")
-ORGANIZATION_ID: Optional[str] = os.getenv("OPENAI_ORG")
-API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
-MODEL: str = os.getenv("MODEL", "gpt-4o")
+project_id = os.getenv("OPENAI_PROJECT_ID")
+organization_id = os.getenv("OPENAI_ORG")
+model = os.getenv("MODEL", "gpt-4o")
+api_key = os.getenv("OPENAI_API_KEY")  # Added missing api_key variable
 
-client: OpenAI = OpenAI(
-    organization=ORGANIZATION_ID,
-    project=PROJECT_ID,
-    api_key=API_KEY,
+client = OpenAI(
+    organization=organization_id,
+    project=project_id,
 )
+
+# Instantiate the OpenAI API client with the given API key
+client = OpenAI(api_key=api_key)
 
 
 def communicate_with_openai(
-    section_text: str,
-    completed_sections: int,
-    total_sections: int,
-    system_message: str,
-    user_prefix: str,
-) -> str:
-    """
-    Function to communicate with OpenAI API.
-
-    Args:
-        section_text (str): The text of the current section to be sent to the API.
-        completed_sections (int): The number of sections completed so far.
-        total_sections (int): The total number of sections.
-        system_message (str): The system message to be sent to the API.
-        user_prefix (str): The prefix to be added to the user message.
-
-    Returns:
-        str: The content of the response message from the OpenAI API.
-
-    Raises:
-        Exception: If there is an error communicating with the OpenAI API or if the response format is unexpected.
-    """
+    section_text, completed_sections, total_sections, system_message, user_prefix
+):
+    """Function to communicate with OpenAI API."""
     try:
-        user_message: str = f"{user_prefix}: {section_text}"
+        # Prepare the user message
+        user_message = f"{user_prefix}: {section_text}"
 
+        # Print the user message, completed and total sections
         print(
             f"\n\nSending to OpenAI API:\n\n{section_text}\n\nCompleted Sections: {completed_sections}/{total_sections}"
         )
 
+        # Call the chat.completions API of OpenAI with essential parameters
         completion = client.chat.completions.create(
-            model=MODEL,
+            model=model,
             messages=[
-                {"role": "system", "content": system_message},
-                {"role": "user", "content": user_message},
+                {"role": "system", "content": system_message},  # System message
+                {"role": "user", "content": user_message},  # User message
             ],
-            max_tokens=3072,
-            temperature=0.5,
+            max_tokens=3072,  # Maximum number of tokens in the generated message
+            temperature=0.5,  # Adding temperature parameter
         )
 
+        # Check if choices and message are available in the response
         if completion.choices and completion.choices[0].message:
+            # Print only the content of the first message in choices
             print(f"API Response Content:\n{completion.choices[0].message.content}")
             return completion.choices[0].message.content
         else:
             raise Exception("Unexpected response format from OpenAI")
 
     except Exception as e:
+        # If any error, raise it with proper information.
         raise Exception(f"Error communicating with OpenAI API: {e}")

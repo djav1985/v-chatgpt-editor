@@ -1,17 +1,84 @@
 import os
 import re
-import difflib
 from docx.shared import Inches
 from docx import Document
 from docx.enum.text import WD_ALIGN_PARAGRAPH
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
 from dotenv import load_dotenv
-from bs4 import BeautifulSoup
 from api import communicate_with_openai
+
+# Pre-compile regular expressions for better performance
+HEADER_LEVEL_REGEX = re.compile(r"\d+")
 
 # Load the environment variables
 load_dotenv()
+
+
+def replace_quotes(text):
+    """Replace straight quotes with curly quotes."""
+    result = ""
+    in_quote = False
+    for char in text:
+        if char == '"':
+            if not in_quote:
+                result += """  # opening quote
+                in_quote = True
+            else:
+                result += """  # closing quote
+                in_quote = False
+        else:
+            result += char
+    return result
+
+
+def process_html_fragments(line_content):
+    """Process HTML content and return fragments with styles."""
+    fragments = []
+    current_text = ""
+    styles = ""
+    i = 0
+    while i < len(line_content):
+        if line_content.startswith("<b>", i):
+            if current_text:
+                fragments.append((current_text, styles))
+                current_text = ""
+            styles = "b"  # Mark bold style
+            i += 3  # Skip <b> tag
+        elif line_content.startswith("</b>", i):
+            if current_text:
+                fragments.append((current_text, styles))
+                current_text = ""
+            styles = ""  # Reset styles after closing </b> tag
+            i += 4  # Skip </b> tag
+        elif line_content.startswith("<i>", i):
+            if current_text:
+                fragments.append((current_text, styles))
+                current_text = ""
+            styles = "i"  # Mark italic style
+            i += 3  # Skip <i> tag
+        elif line_content.startswith("</i>", i):
+            if current_text:
+                fragments.append((current_text, styles))
+                current_text = ""
+            styles = ""  # Reset styles after closing </i> tag
+            i += 4  # Skip </i> tag
+        else:
+            current_text += line_content[i]  # Collect non-tag content
+            i += 1
+    if current_text:
+        fragments.append((current_text, styles))
+    return fragments
+
+
+def add_formatted_runs(para, fragments):
+    """Add formatted runs to a paragraph based on fragments."""
+    for fragment, styles in fragments:
+        text = replace_quotes(fragment)
+        run = para.add_run(text)
+        if 'b' in styles:
+            run.bold = True
+        if 'i' in styles:
+            run.italic = True
+
 
 def split_into_sections(filename, section_size):
     file = os.path.splitext(os.path.basename(filename))[0]
@@ -45,15 +112,19 @@ def split_into_sections(filename, section_size):
             if paragraph.style.name == "Title":
                 styled_text = f"<title>{styled_text}</title>"
             elif paragraph.style.name.startswith("Heading"):
-                header_level = re.findall(r"\d+", paragraph.style.name)[0]
-                styled_text = f"<h{header_level}>{styled_text}</h{header_level}>"
+                matches = HEADER_LEVEL_REGEX.findall(paragraph.style.name)
+                if matches:
+                    header_level = matches[0]
+                    styled_text = f"<h{header_level}>{styled_text}</h{header_level}>"
+                else:
+                    styled_text = f"<p>{styled_text}</p>"
             else:
                 try:
                     if paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER:
                         styled_text = f"<center>{styled_text}</center>"
                     else:
                         styled_text = f"<p>{styled_text}</p>"
-                except:
+                except Exception:
                     styled_text = f"<p>{styled_text}</p>"
 
             new_tokens = len(styled_text.split())
@@ -78,6 +149,7 @@ def split_into_sections(filename, section_size):
 
     except Exception as e:
         raise Exception(f"Error processing document: {e}")
+
 
 def process_manuscript(filename, system_message, user_prefix):
     file = os.path.splitext(os.path.basename(filename))[0]
@@ -141,12 +213,24 @@ def process_manuscript(filename, system_message, user_prefix):
 
             corrected_sections.append(corrected_text)
 
-        print(f"[process_manuscript] Finished processing all sections.")
+        print("Finished processing all sections.")
         return corrected_sections
 
     except Exception as e:
         print(f"[process_manuscript] Exception: {e}")
         raise Exception(f"Error processing manuscript: {e}")
+
+
+def cleanup_temp_files(filename):
+    """Clean up temporary files for a given manuscript."""
+    file = os.path.splitext(os.path.basename(filename))[0]
+    tmp_dir = f"./tmp/{file}"
+
+    if os.path.exists(tmp_dir):
+        import shutil
+        shutil.rmtree(tmp_dir)
+        print(f"Cleaned up temporary directory: {tmp_dir}")
+
 
 def merge_groups_and_save(filename, action):
     file = os.path.splitext(os.path.basename(filename))[0]
@@ -199,130 +283,16 @@ def merge_groups_and_save(filename, action):
                             line_content = line[8:-9]  # Remove <center> and </center>
                             para = doc.add_paragraph()
                             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            # Process the content inside <center> tags for bold and italic
-                            fragments = []
-                            current_text = ""
-                            styles = ""
-                            i = 0
-                            while i < len(line_content):
-                                if line_content.startswith("<b>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = "b"  # Mark bold style
-                                    i += 3  # Skip <b> tag
-                                elif line_content.startswith("</b>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = ""  # Reset styles after closing </b> tag
-                                    i += 4  # Skip </b> tag
-                                elif line_content.startswith("<i>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = "i"  # Mark italic style
-                                    i += 3  # Skip <i> tag
-                                elif line_content.startswith("</i>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = ""  # Reset styles after closing </i> tag
-                                    i += 4  # Skip </i> tag
-                                else:
-                                    current_text += line_content[i]  # Collect non-tag content
-                                    i += 1
-                            if current_text:
-                                fragments.append((current_text, styles))
-
-                            # Apply styles
-                            for fragment, styles in fragments:
-                                # Replace straight quotes with curly quotes
-                                text = ""
-                                curly_quote = "“"
-                                in_quote = False
-                                for char in fragment:
-                                    if char == '"':
-                                        if not in_quote:
-                                            text += "“"  # opening quote
-                                            in_quote = True
-                                        else:
-                                            text += "”"  # closing quote
-                                            in_quote = False
-                                    else:
-                                        text += char
-
-                                # Create a run with the formatted text
-                                run = para.add_run(text)
-                                if 'b' in styles:
-                                    run.bold = True
-                                if 'i' in styles:
-                                    run.italic = True
+                            fragments = process_html_fragments(line_content)
+                            add_formatted_runs(para, fragments)
 
                         # Process <p> tags
                         elif line.startswith("<p>") and line.endswith("</p>"):
                             line_content = line[3:-4]  # Remove <p> and </p>
                             para = doc.add_paragraph()
                             para.paragraph_format.first_line_indent = Inches(0.20)
-                            # Process the content inside <p> tags for bold and italic
-                            fragments = []
-                            current_text = ""
-                            styles = ""
-                            i = 0
-                            while i < len(line_content):
-                                if line_content.startswith("<b>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = "b"  # Mark bold style
-                                    i += 3  # Skip <b> tag
-                                elif line_content.startswith("</b>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = ""  # Reset styles after closing </b> tag
-                                    i += 4  # Skip </b> tag
-                                elif line_content.startswith("<i>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = "i"  # Mark italic style
-                                    i += 3  # Skip <i> tag
-                                elif line_content.startswith("</i>", i):
-                                    if current_text:
-                                        fragments.append((current_text, styles))
-                                        current_text = ""
-                                    styles = ""  # Reset styles after closing </i> tag
-                                    i += 4  # Skip </i> tag
-                                else:
-                                    current_text += line_content[i]  # Collect non-tag content
-                                    i += 1
-                            if current_text:
-                                fragments.append((current_text, styles))
-
-                            # Apply styles
-                            for fragment, styles in fragments:
-                                # Replace straight quotes with curly quotes
-                                text = ""
-                                curly_quote = "“"
-                                in_quote = False
-                                for char in fragment:
-                                    if char == '"':
-                                        if not in_quote:
-                                            text += "“"  # opening quote
-                                            in_quote = True
-                                        else:
-                                            text += "”"  # closing quote
-                                            in_quote = False
-                                    else:
-                                        text += char
-
-                                # Create a run with the formatted text
-                                run = para.add_run(text)
-                                if 'b' in styles:
-                                    run.bold = True
-                                if 'i' in styles:
-                                    run.italic = True
+                            fragments = process_html_fragments(line_content)
+                            add_formatted_runs(para, fragments)
 
             # Save the combined document
             combined_filename = os.path.join(

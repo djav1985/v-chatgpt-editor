@@ -1,6 +1,7 @@
 import argparse
 import os
-from docx_handler import process_manuscript, merge_groups_and_save, split_into_sections
+from docx_handler import process_manuscript, merge_groups_and_save, split_into_sections, cleanup_temp_files
+
 
 def main():
     # Initialize the manuscript editor and set up the command line arguments
@@ -39,21 +40,42 @@ def main():
         "filename", type=str, help="Path to the processed DOCX file"
     )
 
+    # Set up the 'cleanup' command
+    cleanup_parser = subparsers.add_parser(
+        "cleanup", help="Clean up temporary files for a manuscript"
+    )
+    cleanup_parser.add_argument(
+        "filename", type=str, help="Path to the DOCX file to clean up temp files for"
+    )
+
     # Parse the provided command line arguments
     args = parser.parse_args()
 
     try:
         # Check if the file exists for commands that require a file
-        if args.command in ["edit", "translate", "build"] and not os.path.exists(
-            args.filename
-        ):
-            print(f"Error: The file {args.filename} does not exist.")
-            exit(1)
+        if args.command in ["edit", "translate", "build", "cleanup"]:
+            if not os.path.exists(args.filename):
+                print(f"Error: The file {args.filename} does not exist.")
+                exit(1)
+
+            # Validate file extension (except for cleanup which works with any filename)
+            if args.command != "cleanup" and not args.filename.lower().endswith('.docx'):
+                print(f"Error: {args.filename} must be a DOCX file.")
+                exit(1)
+
+        # Validate section count for edit and translate commands
+        if args.command in ["edit", "translate"]:
+            if args.sections <= 0:
+                print("Error: Number of sections must be greater than 0.")
+                exit(1)
+            if args.sections > 4096:  # Reasonable upper limit
+                print("Error: Number of sections should not exceed 4096.")
+                exit(1)
 
         if args.command == "edit":
             # Define user instructions for editing
-            user_prefix = f"Review and correct the following text with minimal changes. Output the corrected text with no comments before or after:"
-            system_message = f"As a renowned romance book editor, review and correct books with minimal changes. Focus on proper spelling, grammar, and punctuation while maintaining consistency in verb tenses, contractions, and compound words. Correct run-on sentences and ensure accurate punctuation in dialogues and inner monologues without altering their structure or wording. Preserve the author's voice and meaning. First, address spelling and typographical errors, followed by grammar and punctuation. Do not add or remove cammas before the use of and.  Ensure verb tense consistency throughout. Use <i> and </i> tags for inner monologue and long-form media titles, but not for emphasis. Only correct spelling in dialogues and inner monologues; avoid changing adjectives or expletives unless fixing a spelling error. Maintain all newlines and HTML formatting as in the original text, with minimal changes."
+            user_prefix = "Review and correct the following text with minimal changes. Output the corrected text with no comments before or after:"
+            system_message = "As a renowned romance book editor, review and correct books with minimal changes. Focus on proper spelling, grammar, and punctuation while maintaining consistency in verb tenses, contractions, and compound words. Correct run-on sentences and ensure accurate punctuation in dialogues and inner monologues without altering their structure or wording. Preserve the author's voice and meaning. First, address spelling and typographical errors, followed by grammar and punctuation. Do not add or remove cammas before the use of and.  Ensure verb tense consistency throughout. Use <i> and </i> tags for inner monologue and long-form media titles, but not for emphasis. Only correct spelling in dialogues and inner monologues; avoid changing adjectives or expletives unless fixing a spelling error. Maintain all newlines and HTML formatting as in the original text, with minimal changes."
             action = "EDIT"
 
             # Begin the editing process
@@ -63,10 +85,8 @@ def main():
             sections = split_into_sections(args.filename, args.sections)
             print(f"{args.filename}: Split into {len(sections)} sections.")
 
-            # Process each section (conceptual; adjust based on actual processing capabilities)
-            corrected_manuscript = process_manuscript(
-                args.filename, system_message, user_prefix
-            )
+            # Process each section
+            process_manuscript(args.filename, system_message, user_prefix)
             print("Manuscript editing completed.")
 
             # Build the final version of the edited manuscript
@@ -77,7 +97,7 @@ def main():
         elif args.command == "translate":
             # Define user instructions for translation
             user_prefix = f"1. Translate the text from English to {args.language} based on your rules with no comments before or after:"
-            system_message = f"You are a renowned expert in literary translation. Use the following rules to correct text: 1. Rather than adhering to a literal, word-for-word translation, deeply consider the distinct cultural nuances, structural and syntactical variations, grammatical norms, idiomatic expressions, and cultural contexts of each language. 2. Make appropriate adjustments to ensure these elements are accurately represented, while still preserving the original tone and intent of the text and maintaining the original HTML structure. 3. Don't wrap output in ```html ```"
+            system_message = "You are a renowned expert in literary translation. Use the following rules to correct text: 1. Rather than adhering to a literal, word-for-word translation, deeply consider the distinct cultural nuances, structural and syntactical variations, grammatical norms, idiomatic expressions, and cultural contexts of each language. 2. Make appropriate adjustments to ensure these elements are accurately represented, while still preserving the original tone and intent of the text and maintaining the original HTML structure. 3. Don't wrap output in ```html ```"
             action = args.language
 
             # Begin the translation process
@@ -87,10 +107,8 @@ def main():
             sections = split_into_sections(args.filename, args.sections)
             print(f"{args.filename}: Split into {len(sections)} sections.")
 
-            # Process each section (conceptual; adjust based on actual processing capabilities)
-            corrected_manuscript = process_manuscript(
-                args.filename, system_message, user_prefix
-            )
+            # Process each section
+            process_manuscript(args.filename, system_message, user_prefix)
             print("Manuscript translation completed.")
 
             # Build the final version of the edited manuscript
@@ -104,10 +122,16 @@ def main():
             merge_groups_and_save(args.filename, action)
             print(f"Final document {args.filename} built and saved.")
 
+        elif args.command == "cleanup":
+            print(f"Cleaning up temporary files for {args.filename}...")
+            cleanup_temp_files(args.filename)
+            print("Cleanup completed.")
+
         else:
             print("No valid command selected.")
     except Exception as e:
         print(f"An error occurred: {e}")
+
 
 if __name__ == "__main__":
     main()

@@ -11,15 +11,18 @@ load_dotenv()
 project_id = os.getenv("OPENAI_PROJECT_ID")
 organization_id = os.getenv("OPENAI_ORG")
 model = os.getenv("MODEL", "gpt-4o")
-api_key = os.getenv("OPENAI_API_KEY")  # Added missing api_key variable
+api_key = os.getenv("OPENAI_API_KEY")
 
+# Validate that the API key is provided
+if not api_key:
+    raise ValueError("OPENAI_API_KEY is required but not found in environment variables")
+
+# Instantiate the OpenAI API client with the given API key and configuration
 client = OpenAI(
+    api_key=api_key,
     organization=organization_id,
     project=project_id,
 )
-
-# Instantiate the OpenAI API client with the given API key
-client = OpenAI(api_key=api_key)
 
 
 def communicate_with_openai(

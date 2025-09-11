@@ -21,11 +21,13 @@
 - [📍 Overview](#-overview)
 - [👾 Features](#-features)
 - [📁 Project Structure](#-project-structure)
-	- [📂 Project Index](#-project-index)
+        - [📂 Project Index](#-project-index)
 - [🚀 Getting Started](#-getting-started)
-	- [☑️ Prerequisites](#️-prerequisites)
-	- [⚙️ Installation](#️-installation)
-	- [🤖 Usage](#-usage)
+        - [☑️ Prerequisites](#️-prerequisites)
+        - [⚙️ Installation](#️-installation)
+        - [🔧 Configuration](#-configuration)
+        - [🖥️ Command-Line Usage](#-command-line-usage)
+- [🤝 Contributing](#-contributing)
 - [🎗 License](#-license)
 
 ---
@@ -38,15 +40,9 @@ This project streamlines the editing and translation of DOCX manuscripts, addres
 
 ## 👾 Features
 
-|      | Feature         | Summary       |
-| :--- | :---:           | :---          |
-| ⚙️  | **Architecture**  | <ul><li>Utilizes a modular architecture with components like `app/api.py` for API interactions and `app/docx_handler.py` for document processing.</li><li>Configuration management is handled through the `.env` file, ensuring flexibility and security in environment variable management.</li><li>Integrates various functionalities such as editing, translating, and building documents through `app/main.py`, streamlining the manuscript management workflow.</li></ul> |
-| 🔩 | **Code Quality**  | <ul><li>Follows best practices in Python coding standards, enhancing readability and maintainability.</li><li>Utilizes a structured approach to separate concerns across different modules, such as document handling and API communication.</li><li>Includes a `requirements.txt` file that clearly defines dependencies, promoting consistency across environments.</li></ul> |
-| 📄 | **Documentation** | <ul><li>Comprehensive documentation is provided, including installation and usage commands for both `<pip>`.</li><li>Code comments and module docstrings enhance understanding of functionality and usage.</li><li>Documentation covers essential aspects like configuration management and command-line functionalities.</li></ul> |
-| 🔌 | **Integrations**  | <ul><li>Integrates with the `<OpenAI API>` for dynamic content generation based on user input.</li><li>Supports external services through environment variables defined in the `.env` file.</li><li>Facilitates document processing by integrating with libraries for natural language processing and web scraping.</li></ul> |
-| 🧩 | **Modularity**    | <ul><li>Each component is designed to handle specific tasks, such as `app/docx_handler.py` for document manipulation and `app/api.py` for API interactions.</li><li>Encourages reusability of code across different parts of the application.</li><li>Modular design allows for easier testing and debugging of individual components.</li></ul> |
-| ⚡️  | **Performance**   | <ul><li>Optimized for handling large DOCX files efficiently through chunk processing in `app/docx_handler.py`.</li><li>Utilizes asynchronous API calls to improve responsiveness during content generation.</li><li>Performance considerations are integrated into the architecture to ensure smooth user experience.</li></ul> |
-| 🛡️ | **Security**      | <ul><li>Environment variables are managed securely through the `.env` file, protecting sensitive information like API keys.</li><li>Code practices are in place to prevent common vulnerabilities in API interactions.</li><li>Regular updates to dependencies in `requirements.txt` help mitigate security risks.</li></ul> |
+- **API Integration** – `app/api.py` manages requests to OpenAI services.
+- **DOCX Processing** – `app/docx_handler.py` splits manuscripts, applies edits, and rebuilds documents.
+- **Command Interface** – `app/main.py` exposes `edit`, `translate`, `build`, and `cleanup` commands.
 
 ---
 
@@ -55,58 +51,75 @@ This project streamlines the editing and translation of DOCX manuscripts, addres
 ```sh
 └── /
     ├── README.md
+    ├── IMPROVEMENTS.md
     ├── app
-    │   ├── .env
     │   ├── api.py
     │   ├── docx_handler.py
     │   ├── main.py
+    │   ├── validate_improvements.py
     │   ├── requirements.txt
-    │   └── run.sh
-    └── repo.png
+    │   ├── run.sh
+    │   ├── input/
+    │   ├── output/
+    │   └── .env (user-provided)
+    └── v-chatgpt-editor.png
 ```
 
 
 ### 📂 Project Index
 <details open>
-	<summary><b><code>/</code></b></summary>
-	<details> <!-- __root__ Submodule -->
-		<summary><b>__root__</b></summary>
-		<blockquote>
-			<table>
-			</table>
-		</blockquote>
-	</details>
-	<details> <!-- app Submodule -->
-		<summary><b>app</b></summary>
-		<blockquote>
-			<table>
-			<tr>
-				<td><b><a href='/app/.env'>.env</a></b></td>
-				<td>- Configuration management is facilitated through the .env file, which defines essential environment variables for the project<br>- It specifies the API key for external services, the model to be utilized, and the directory for output files<br>- This setup ensures that the application can operate seamlessly across different environments while maintaining flexibility and security in handling sensitive information.</td>
-			</tr>
-			<tr>
-				<td><b><a href='/app/api.py'>api.py</a></b></td>
-				<td>- Facilitates communication with the OpenAI API by preparing user messages and handling responses<br>- It retrieves necessary configurations from environment variables, ensuring flexibility in API interactions<br>- This functionality is integral to the project, enabling dynamic content generation based on user input and enhancing the overall user experience within the application.</td>
-			</tr>
-			<tr>
-				<td><b><a href='/app/docx_handler.py'>docx_handler.py</a></b></td>
-				<td>- Facilitates the processing of DOCX manuscripts by splitting them into manageable sections, correcting content through an API, and merging the results into a final document<br>- It enhances document formatting and style retention while ensuring that the output is organized and accessible<br>- This functionality is integral to the overall architecture, enabling efficient manuscript editing and improving the quality of the final deliverables.</td>
-			</tr>
-			<tr>
-				<td><b><a href='/app/main.py'>main.py</a></b></td>
-				<td>- Facilitates the processing of DOCX manuscript files by providing command-line functionalities for editing, translating, and building final documents<br>- It allows users to split manuscripts into sections for focused editing or translation, ensuring adherence to specific guidelines while preserving the author's voice<br>- The integration with other components in the codebase enhances the overall manuscript management workflow, streamlining the editing and translation processes.</td>
-			</tr>
-			<tr>
-				<td><b><a href='/app/requirements.txt'>requirements.txt</a></b></td>
-				<td>- Defines essential dependencies for the project, enabling functionalities such as command-line argument parsing, document manipulation, environment variable management, web scraping, and natural language processing<br>- These libraries collectively support the overall architecture by facilitating user interaction, data handling, and integration with external services, thereby enhancing the project's capability to deliver robust and dynamic features.</td>
-			</tr>
-			<tr>
-				<td><b><a href='/app/run.sh'>run.sh</a></b></td>
-				<td>- Facilitates user interaction for managing files within the project, allowing selection of input files and configuration of processing options such as editing, translating, or building<br>- It sets up a Python virtual environment, executes the appropriate scripts based on user choices, and provides a cleanup option to delete contents from specified directories<br>- This enhances the overall usability and organization of the codebase.</td>
-			</tr>
-			</table>
-		</blockquote>
-	</details>
+  <summary><b><code>/</code></b></summary>
+  <blockquote>
+    <table>
+      <tr>
+        <td><b><a href='/IMPROVEMENTS.md'>IMPROVEMENTS.md</a></b></td>
+        <td>Summary of code quality improvements and validation steps.</td>
+      </tr>
+    </table>
+  </blockquote>
+  <details>
+    <summary><b>app</b></summary>
+    <blockquote>
+      <table>
+        <tr>
+          <td><b><a href='/app/api.py'>api.py</a></b></td>
+          <td>OpenAI API utilities.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/docx_handler.py'>docx_handler.py</a></b></td>
+          <td>DOCX splitting and merging helpers.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/main.py'>main.py</a></b></td>
+          <td>CLI entry point.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/validate_improvements.py'>validate_improvements.py</a></b></td>
+          <td>Internal validation checks.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/input/'>input/</a></b></td>
+          <td>Source manuscripts.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/output/'>output/</a></b></td>
+          <td>Processed documents.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/requirements.txt'>requirements.txt</a></b></td>
+          <td>Project dependencies.</td>
+        </tr>
+        <tr>
+          <td><b><a href='/app/run.sh'>run.sh</a></b></td>
+          <td>Interactive helper script.</td>
+        </tr>
+        <tr>
+          <td><code>.env</code></td>
+          <td>User-provided environment variables.</td>
+        </tr>
+      </table>
+    </blockquote>
+  </details>
 </details>
 
 ---
@@ -144,15 +157,42 @@ To get started with `v-chatgpt-editor`:
 
    The script will automatically install dependencies, and guide you through selecting options such as editing or translating documents.
 
-### 🤖 Usage
+### 🔧 Configuration
 
-To run the application, simply use:
+Create a `.env` file in `app/` with the following variables:
 
-```sh
-❯ ./run.sh
+```env
+OPENAI_API_KEY=<required>
+OPENAI_PROJECT_ID=<optional project id>
+OPENAI_ORG=<optional organization>
+MODEL=gpt-4o-mini
+OUTPUT_DIR=output
 ```
 
-The script will help you choose which file to work on, and whether you want to edit or translate, making the process straightforward and interactive.
+This file is user-provided and should not be committed to version control.
+
+### 🖥️ Command-Line Usage
+
+Run the application directly:
+
+```sh
+python3 app/main.py edit path/to/file.docx
+python3 app/main.py translate path/to/file.docx
+python3 app/main.py build path/to/file.docx
+python3 app/main.py cleanup
+```
+
+Alternatively, use the interactive helper script:
+
+```sh
+./app/run.sh
+```
+
+---
+
+## 🤝 Contributing
+
+See [IMPROVEMENTS.md](IMPROVEMENTS.md) for a summary of recent code quality improvements and validation steps. Run `python3 app/validate_improvements.py` to perform internal checks before committing changes.
 
 ---
 

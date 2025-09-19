@@ -149,13 +149,15 @@ To get started with `v-chatgpt-editor`:
    ❯ cd v-chatgpt-editor
    ```
 
-3. Run the setup script to install dependencies and start the app:
+3. Run the setup script from the repository root to install dependencies and start the app:
 
    ```sh
-   ❯ ./run.sh
+   ❯ ./app/run.sh
    ```
 
    The script will automatically install dependencies, and guide you through selecting options such as editing or translating documents.
+
+   > 💡 **Smoke test:** Running `./app/run.sh` from the project root confirms the helper script can locate its resources regardless of your current directory.
 
 ### 🔧 Configuration
 

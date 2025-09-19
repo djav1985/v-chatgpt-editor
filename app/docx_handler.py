@@ -8,6 +8,9 @@ from api import communicate_with_openai
 
 # Pre-compile regular expressions for better performance
 HEADER_LEVEL_REGEX = re.compile(r"\d+")
+HEADING_TAG_REGEX = re.compile(
+    r"<h(?P<level>[1-9])>(.*?)</h(?P=level)>", re.IGNORECASE
+)
 
 # Load the environment variables
 load_dotenv()
@@ -15,57 +18,87 @@ load_dotenv()
 
 def replace_quotes(text):
     """Replace straight quotes with curly quotes."""
-    result = ""
-    in_quote = False
-    for char in text:
+    result = []
+    double_open = True
+    single_open = True
+    length = len(text)
+
+    for index, char in enumerate(text):
+        prev_char = text[index - 1] if index > 0 else ""
+        next_char = text[index + 1] if index + 1 < length else ""
+
         if char == '"':
-            if not in_quote:
-                result += """  # opening quote
-                in_quote = True
+            should_open = double_open
+
+            if double_open and prev_char and not prev_char.isspace():
+                should_open = False
+            elif not double_open and (not prev_char or prev_char.isspace()):
+                should_open = True
+
+            if should_open:
+                result.append("“")
+                double_open = False
             else:
-                result += """  # closing quote
-                in_quote = False
+                result.append("”")
+                double_open = True
+        elif char == "'":
+            if prev_char and prev_char.isalnum():
+                result.append("’")
+                single_open = True
+            elif next_char and next_char.isalnum():
+                result.append("‘")
+                single_open = False
+            else:
+                if single_open:
+                    result.append("‘")
+                else:
+                    result.append("’")
+                single_open = not single_open
         else:
-            result += char
-    return result
+            result.append(char)
+
+    return "".join(result)
 
 
 def process_html_fragments(line_content):
     """Process HTML content and return fragments with styles."""
     fragments = []
-    current_text = ""
-    styles = ""
+    current_text = []
+    style_stack = []
     i = 0
+
+    def append_fragment():
+        if current_text:
+            fragments.append(("".join(current_text), set(style_stack)))
+            current_text.clear()
+
     while i < len(line_content):
-        if line_content.startswith("<b>", i):
-            if current_text:
-                fragments.append((current_text, styles))
-                current_text = ""
-            styles = "b"  # Mark bold style
-            i += 3  # Skip <b> tag
-        elif line_content.startswith("</b>", i):
-            if current_text:
-                fragments.append((current_text, styles))
-                current_text = ""
-            styles = ""  # Reset styles after closing </b> tag
-            i += 4  # Skip </b> tag
-        elif line_content.startswith("<i>", i):
-            if current_text:
-                fragments.append((current_text, styles))
-                current_text = ""
-            styles = "i"  # Mark italic style
-            i += 3  # Skip <i> tag
-        elif line_content.startswith("</i>", i):
-            if current_text:
-                fragments.append((current_text, styles))
-                current_text = ""
-            styles = ""  # Reset styles after closing </i> tag
-            i += 4  # Skip </i> tag
+        if line_content.startswith("<", i):
+            end_idx = line_content.find(">", i)
+            if end_idx == -1:
+                current_text.append(line_content[i:])
+                break
+
+            tag_content = line_content[i + 1 : end_idx].strip().lower()
+            is_closing = tag_content.startswith("/")
+            tag_name = tag_content[1:] if is_closing else tag_content
+
+            if tag_name in {"b", "i"}:
+                append_fragment()
+                if is_closing:
+                    for idx in range(len(style_stack) - 1, -1, -1):
+                        if style_stack[idx] == tag_name:
+                            del style_stack[idx]
+                            break
+                else:
+                    style_stack.append(tag_name)
+
+            i = end_idx + 1
         else:
-            current_text += line_content[i]  # Collect non-tag content
+            current_text.append(line_content[i])
             i += 1
-    if current_text:
-        fragments.append((current_text, styles))
+
+    append_fragment()
     return fragments
 
 
@@ -247,6 +280,7 @@ def merge_groups_and_save(filename, action):
         for file_type in [".new", ".old"]:
             prefix = f"{action.upper()}_" if file_type == ".new" else "ORIGINAL_"
             doc = Document()  # Initialize the Document outside the files loop
+            seen_h1_heading = False
 
             # Sort files by their numeric order
             files = sorted(
@@ -263,36 +297,54 @@ def merge_groups_and_save(filename, action):
                 para = None
                 for line in text_content:
                     line = line.strip()
-                    if line:
-                        # Process <title> tags
-                        if line.startswith("<title>") and line.endswith("</title>"):
-                            line_content = line[7:-8]
-                            para = doc.add_heading(line_content, level=1)
+                    if not line:
+                        continue
+
+                    if line.startswith("<title>") and line.endswith("</title>"):
+                        line_content = replace_quotes(line[7:-8])
+                        para = doc.add_heading(line_content, level=1)
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        continue
+
+                    heading_match = HEADING_TAG_REGEX.fullmatch(line)
+                    if heading_match:
+                        heading_level = int(heading_match.group("level"))
+                        heading_content = heading_match.group(2)
+
+                        if heading_level == 1:
+                            if seen_h1_heading:
+                                doc.add_page_break()
+                            else:
+                                seen_h1_heading = True
+
+                        para = doc.add_heading("", level=heading_level)
+                        if heading_level == 1:
                             para.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-                        # Process <h1> and <h2> tags
-                        elif line.startswith("<h1>") and line.endswith("</h1>"):
-                            doc.add_page_break()
-                            para = doc.add_heading(line[4:-5], level=1)
-                            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        elif line.startswith("<h2>") and line.endswith("</h2>"):
-                            para = doc.add_heading(line[4:-5], level=2)
-
-                        # Process <center> tags
-                        elif line.startswith("<center>") and line.endswith("</center>"):
-                            line_content = line[8:-9]  # Remove <center> and </center>
-                            para = doc.add_paragraph()
-                            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                            fragments = process_html_fragments(line_content)
+                        fragments = process_html_fragments(heading_content)
+                        if fragments:
+                            if para.runs:
+                                for run in para.runs:
+                                    run.text = ""
                             add_formatted_runs(para, fragments)
+                        else:
+                            para.text = replace_quotes(heading_content)
+                        continue
 
-                        # Process <p> tags
-                        elif line.startswith("<p>") and line.endswith("</p>"):
-                            line_content = line[3:-4]  # Remove <p> and </p>
-                            para = doc.add_paragraph()
-                            para.paragraph_format.first_line_indent = Inches(0.20)
-                            fragments = process_html_fragments(line_content)
-                            add_formatted_runs(para, fragments)
+                    if line.startswith("<center>") and line.endswith("</center>"):
+                        line_content = line[8:-9]
+                        para = doc.add_paragraph()
+                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                        fragments = process_html_fragments(line_content)
+                        add_formatted_runs(para, fragments)
+                        continue
+
+                    if line.startswith("<p>") and line.endswith("</p>"):
+                        line_content = line[3:-4]
+                        para = doc.add_paragraph()
+                        para.paragraph_format.first_line_indent = Inches(0.20)
+                        fragments = process_html_fragments(line_content)
+                        add_formatted_runs(para, fragments)
 
             # Save the combined document
             combined_filename = os.path.join(

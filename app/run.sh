@@ -1,9 +1,28 @@
 #!/bin/bash
 
-# Function to list and choose a file from the ./input directory
+# Determine the directory containing this script
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INPUT_DIR="$SCRIPT_DIR/input"
+REQUIREMENTS_FILE="$SCRIPT_DIR/requirements.txt"
+MAIN_SCRIPT="$SCRIPT_DIR/main.py"
+
+# Function to list and choose a file from the input directory
 choose_file() {
-    echo "Available files in ./input directory:"
-    local files=(./input/*)
+    echo "Available files in $INPUT_DIR directory:"
+    if [ ! -d "$INPUT_DIR" ]; then
+        echo "Input directory not found: $INPUT_DIR"
+        exit 1
+    fi
+
+    shopt -s nullglob
+    local files=("$INPUT_DIR"/*)
+    shopt -u nullglob
+
+    if [ ${#files[@]} -eq 0 ]; then
+        echo "No files found in $INPUT_DIR"
+        exit 1
+    fi
+
     for i in "${!files[@]}"; do
         echo "$((i+1)): ${files[i]##*/}"
     done
@@ -43,10 +62,10 @@ run_python_script() {
 
     case $action in
         1) # Edit
-            python3 main.py edit "$filename" "$sections"
+            python3 "$MAIN_SCRIPT" edit "$filename" "$sections"
         ;;
         2) # Translate
-            python3 main.py translate "$filename" "$language" "$sections"
+            python3 "$MAIN_SCRIPT" translate "$filename" "$language" "$sections"
         ;;
         *)
             echo "Invalid action selected."
@@ -61,14 +80,14 @@ echo "2: Translate"
 read -r action
 
 # Directory for the virtual environment
-VENV_DIR="venv"
+VENV_DIR="$SCRIPT_DIR/venv"
 
 # Check and activate virtual environment
 if [ ! -d "$VENV_DIR" ]; then
     echo "Setting up the Python virtual environment..."
     python3 -m venv "$VENV_DIR"
     source "$VENV_DIR/bin/activate"
-    pip3 install -r requirements.txt
+    pip3 install -r "$REQUIREMENTS_FILE"
 else
     echo "Activating virtual environment..."
     source "$VENV_DIR/bin/activate"
@@ -89,7 +108,7 @@ case $action in
             read -r language
         fi
         # Execute the Python script with the selected options
-        run_python_script "./input/$filename" "$sections" "$language" "$action"
+        run_python_script "$INPUT_DIR/$filename" "$sections" "$language" "$action"
     ;;
     *)
         echo "Invalid action selected."

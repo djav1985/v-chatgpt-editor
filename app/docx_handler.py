@@ -161,13 +161,20 @@ def split_into_sections(filename, section_size):
                     styled_text = f"<p>{styled_text}</p>"
 
             new_tokens = len(styled_text.split())
-            if current_tokens + new_tokens > section_size:
+            if current_tokens + new_tokens > section_size and current_section:
                 sections.append(current_section)
                 current_section = []
                 current_tokens = 0
 
             current_section.append(styled_text)
             current_tokens += new_tokens
+
+            # Seal oversized single-paragraph sections immediately so they
+            # each get their own section without splitting the paragraph.
+            if new_tokens > section_size:
+                sections.append(current_section)
+                current_section = []
+                current_tokens = 0
 
         if current_section:
             sections.append(current_section)
@@ -209,15 +216,24 @@ def process_manuscript(filename, system_message, user_prefix):
         # Count the number of '.old' files in the './tmp' directory
         total_sections = len(old_files)
 
+        # Build a set of stems (filename without extension) for current .old files
+        old_stems = {os.path.splitext(f)[0] for f in old_files}
+
+        # Initialize completed_sections from any pre-existing .new files that
+        # correspond to the current set of .old files, so that resume (re-run
+        # after partial completion) works correctly even if there are stale .new files.
+        completed_sections = sum(
+            1
+            for f in os.listdir(tmp_dir)
+            if f.endswith(".new") and os.path.splitext(f)[0] in old_stems
+        )
+        # Ensure progress count never exceeds the total number of sections
+        completed_sections = min(completed_sections, total_sections)
+
         # Process each .old file
         for old_file in old_files:
             print(f"[process_manuscript] Processing section file: {old_file}")
             new_filename = os.path.join(tmp_dir, old_file.replace(".old", ".new"))
-
-            # Count the number of '.new' files inside the loop
-            completed_sections = len(
-                [f for f in os.listdir(tmp_dir) if f.endswith(".new")]
-            )
 
             # Process only if .new file does not exist
             if not os.path.exists(new_filename):
@@ -238,6 +254,10 @@ def process_manuscript(filename, system_message, user_prefix):
 
                 with open(new_filename, "w") as new_section_file:
                     new_section_file.write(corrected_text)
+
+                # Increment completed_sections for progress tracking, but do not
+                # allow it to exceed total_sections.
+                completed_sections = min(completed_sections + 1, total_sections)
 
             else:
                 print(f"[process_manuscript] .new file already exists for section: {old_file}")
@@ -354,4 +374,4 @@ def merge_groups_and_save(filename, action):
             print(f"Combined DOCX {combined_filename} saved.")
 
     except Exception as e:
-        print(f"Error in document merging and saving: {e}")
+        raise Exception(f"Error in document merging and saving: {e}") from e

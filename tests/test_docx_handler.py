@@ -189,7 +189,15 @@ def test_split_no_empty_section_artifacts(tmp_path, monkeypatch):
 
 def test_merge_groups_and_save_raises_on_missing_tmp_dir(tmp_path, monkeypatch):
     """merge_groups_and_save raises an exception instead of silently swallowing it."""
+    # Isolate the current working directory to avoid interference from any existing
+    # ./tmp/missing directory in the project root or other tests.
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("OUTPUT_DIR", str(tmp_path / "output"))
+
+    # Ensure the tmp directory for "missing.docx" does not exist in this isolated cwd.
+    missing_tmp_dir = tmp_path / "tmp" / "missing"
+    if missing_tmp_dir.exists():
+        shutil.rmtree(missing_tmp_dir)
 
     # The tmp directory for "missing.docx" does not exist, so os.listdir will fail.
     with pytest.raises(Exception, match="Error in document merging and saving"):

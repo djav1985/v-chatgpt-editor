@@ -216,11 +216,19 @@ def process_manuscript(filename, system_message, user_prefix):
         # Count the number of '.old' files in the './tmp' directory
         total_sections = len(old_files)
 
-        # Initialize completed_sections once from any pre-existing .new files
-        # so that resume (re-run after partial completion) works correctly.
-        completed_sections = len(
-            [f for f in os.listdir(tmp_dir) if f.endswith(".new")]
+        # Build a set of stems (filename without extension) for current .old files
+        old_stems = {os.path.splitext(f)[0] for f in old_files}
+
+        # Initialize completed_sections from any pre-existing .new files that
+        # correspond to the current set of .old files, so that resume (re-run
+        # after partial completion) works correctly even if there are stale .new files.
+        completed_sections = sum(
+            1
+            for f in os.listdir(tmp_dir)
+            if f.endswith(".new") and os.path.splitext(f)[0] in old_stems
         )
+        # Ensure progress count never exceeds the total number of sections
+        completed_sections = min(completed_sections, total_sections)
 
         # Process each .old file
         for old_file in old_files:
@@ -247,7 +255,9 @@ def process_manuscript(filename, system_message, user_prefix):
                 with open(new_filename, "w") as new_section_file:
                     new_section_file.write(corrected_text)
 
-                completed_sections += 1
+                # Increment completed_sections for progress tracking, but do not
+                # allow it to exceed total_sections.
+                completed_sections = min(completed_sections + 1, total_sections)
 
             else:
                 print(f"[process_manuscript] .new file already exists for section: {old_file}")

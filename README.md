@@ -84,13 +84,23 @@ v-chatgpt-editor/
 
 ### Interactive Setup
 
-From the repository root, run:
+Run the helper from the repository root:
 
 ```sh
 bash app/run.sh
 ```
 
-The script creates a virtual environment under `app/`, installs dependencies, and prompts you to choose an action, a DOCX file from `app/input/`, and a section token budget. Translation also prompts for a target language.
+The script changes to the `app/` directory, so it can be launched from the repository root or another working directory. It then:
+
+1. Creates `app/venv/` if the virtual environment is missing or incomplete.
+2. Installs or updates packages from `app/requirements.txt` and activates the environment.
+3. Prompts you to select **Edit** or **Translate**.
+4. Lists `.docx` files in `app/input/` and prompts you to choose one. It exits if none are found or the file selection is invalid.
+5. Prompts for the maximum token budget per section: `256`, `512`, `1024`, or `2048`. An invalid choice uses `256`. A paragraph larger than the selected budget is kept whole and can exceed the budget.
+6. For translation, prompts for the target language.
+7. Calls `main.py` with the selected action and options. Intermediate processing files are stored under `app/tmp/`; completed documents go to the configured output directory (default: `app/output/`).
+
+On Windows, run the helper from Git Bash or WSL. On normal completion, the script deactivates its virtual environment.
 
 ---
 

@@ -1,189 +1,94 @@
+import hashlib
 import os
-import re
-from docx.shared import Inches
+import warnings
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any
+
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-from dotenv import load_dotenv
-from api import communicate_with_openai
 
-# Pre-compile regular expressions for better performance
-HEADER_LEVEL_REGEX = re.compile(r"\d+")
-HEADING_TAG_REGEX = re.compile(
-    r"<h(?P<level>[1-9])>(.*?)</h(?P=level)>", re.IGNORECASE
-)
-
-# Load the environment variables
-load_dotenv()
+from api import communicate_with_openai, get_client
+from docx_markup import add_markup_line, serialize_paragraph
+from token_count import count_model_tokens
 
 
-def replace_quotes(text):
-    """Replace straight quotes with curly quotes."""
-    result = []
-    double_open = True
-    single_open = True
-    length = len(text)
+def split_into_sections(
+    filename: str,
+    max_tokens: int,
+    cache_key: str = "",
+    model_name: str = "gpt-5-mini",
+    tmp_dir: str | None = None,
+) -> list[list[str]]:
+    """Split a DOCX into paragraph-preserving sections under a token budget."""
+    if not isinstance(max_tokens, int) or max_tokens <= 0:
+        raise ValueError("The maximum token budget must be a positive integer.")
 
-    for index, char in enumerate(text):
-        prev_char = text[index - 1] if index > 0 else ""
-        next_char = text[index + 1] if index + 1 < length else ""
-
-        if char == '"':
-            should_open = double_open
-
-            if double_open and prev_char and not prev_char.isspace():
-                should_open = False
-            elif not double_open and (not prev_char or prev_char.isspace()):
-                should_open = True
-
-            if should_open:
-                result.append("“")
-                double_open = False
-            else:
-                result.append("”")
-                double_open = True
-        elif char == "'":
-            if prev_char and prev_char.isalnum():
-                result.append("’")
-                single_open = True
-            elif next_char and next_char.isalnum():
-                result.append("‘")
-                single_open = False
-            else:
-                if single_open:
-                    result.append("‘")
-                else:
-                    result.append("’")
-                single_open = not single_open
-        else:
-            result.append(char)
-
-    return "".join(result)
-
-
-def process_html_fragments(line_content):
-    """Process HTML content and return fragments with styles."""
-    fragments = []
-    current_text = []
-    style_stack = []
-    i = 0
-
-    def append_fragment():
-        if current_text:
-            fragments.append(("".join(current_text), set(style_stack)))
-            current_text.clear()
-
-    while i < len(line_content):
-        if line_content.startswith("<", i):
-            end_idx = line_content.find(">", i)
-            if end_idx == -1:
-                current_text.append(line_content[i:])
-                break
-
-            tag_content = line_content[i + 1 : end_idx].strip().lower()
-            is_closing = tag_content.startswith("/")
-            tag_name = tag_content[1:] if is_closing else tag_content
-
-            if tag_name in {"b", "i"}:
-                append_fragment()
-                if is_closing:
-                    for idx in range(len(style_stack) - 1, -1, -1):
-                        if style_stack[idx] == tag_name:
-                            del style_stack[idx]
-                            break
-                else:
-                    style_stack.append(tag_name)
-
-            i = end_idx + 1
-        else:
-            current_text.append(line_content[i])
-            i += 1
-
-    append_fragment()
-    return fragments
-
-
-def add_formatted_runs(para, fragments):
-    """Add formatted runs to a paragraph based on fragments."""
-    for fragment, styles in fragments:
-        text = replace_quotes(fragment)
-        run = para.add_run(text)
-        if 'b' in styles:
-            run.bold = True
-        if 'i' in styles:
-            run.italic = True
-
-
-def split_into_sections(filename, section_size):
     file = os.path.splitext(os.path.basename(filename))[0]
-    # Create a directory with the name './tmp/{file}'
-    tmp_dir = f"./tmp/{file}"
-    if not os.path.exists(tmp_dir):
-        os.makedirs(tmp_dir)
-    """Load a DOCX file, split it into sections, and create .old files."""
+    tmp_dir = tmp_dir or f"./tmp/{file}"
+    os.makedirs(tmp_dir, exist_ok=True)
+
     try:
         doc = Document(filename)
-        sections = []
-        current_section = []
-        current_tokens = 0
+        sections: list[list[str]] = []
+        current_section: list[str] = []
 
-        for paragraph in doc.paragraphs:
-            runs = paragraph.runs
-            if not runs:  # Check if paragraph is empty
+        for paragraph_number, paragraph in enumerate(doc.paragraphs, start=1):
+            styled_text = serialize_paragraph(paragraph, tmp_dir)
+            if styled_text is None:  # Empty paragraph
                 continue
 
-            styled_text = ""
-            for run in runs:
-                run_text = run.text
-                if run.bold and run.italic:
-                    run_text = f"<b><i>{run_text}</i></b>"
-                elif run.bold:
-                    run_text = f"<b>{run_text}</b>"
-                elif run.italic:
-                    run_text = f"<i>{run_text}</i>"
-                styled_text += run_text
+            paragraph_tokens = count_model_tokens(styled_text, model_name)
+            if paragraph_tokens > max_tokens:
+                warnings.warn(
+                    f"Paragraph {paragraph_number} contains {paragraph_tokens} "
+                    f"tokens, exceeding the {max_tokens}-token section budget; "
+                    "keeping it intact.",
+                    UserWarning,
+                )
 
-            if paragraph.style.name == "Title":
-                styled_text = f"<title>{styled_text}</title>"
-            elif paragraph.style.name.startswith("Heading"):
-                matches = HEADER_LEVEL_REGEX.findall(paragraph.style.name)
-                if matches:
-                    header_level = matches[0]
-                    styled_text = f"<h{header_level}>{styled_text}</h{header_level}>"
-                else:
-                    styled_text = f"<p>{styled_text}</p>"
-            else:
-                try:
-                    if paragraph.alignment == WD_ALIGN_PARAGRAPH.CENTER:
-                        styled_text = f"<center>{styled_text}</center>"
-                    else:
-                        styled_text = f"<p>{styled_text}</p>"
-                except Exception:
-                    styled_text = f"<p>{styled_text}</p>"
-
-            new_tokens = len(styled_text.split())
-            if current_tokens + new_tokens > section_size and current_section:
-                sections.append(current_section)
-                current_section = []
-                current_tokens = 0
+            if current_section:
+                candidate_section = "\n".join([*current_section, styled_text])
+                if count_model_tokens(candidate_section, model_name) > max_tokens:
+                    sections.append(current_section)
+                    current_section = []
 
             current_section.append(styled_text)
-            current_tokens += new_tokens
-
-            # Seal oversized single-paragraph sections immediately so they
-            # each get their own section without splitting the paragraph.
-            if new_tokens > section_size:
-                sections.append(current_section)
-                current_section = []
-                current_tokens = 0
 
         if current_section:
             sections.append(current_section)
 
-        # Create .old files for each section
+        source_hash = hashlib.sha256()
+        with open(filename, "rb") as source_file:
+            for block in iter(lambda: source_file.read(1024 * 1024), b""):
+                source_hash.update(block)
+        run_identity = "\0".join(
+            [
+                source_hash.hexdigest(),
+                str(max_tokens),
+                model_name,
+                cache_key,
+            ]
+        )
+        run_signature = hashlib.sha256(run_identity.encode("utf-8")).hexdigest()
+        signature_path = os.path.join(tmp_dir, ".run-signature")
+        try:
+            with open(signature_path, encoding="utf-8") as signature_file:
+                previous_signature = signature_file.read()
+        except FileNotFoundError:
+            previous_signature = None
+
+        if previous_signature != run_signature:
+            for artifact in os.listdir(tmp_dir):
+                if artifact.endswith((".old", ".new")):
+                    os.remove(os.path.join(tmp_dir, artifact))
+
+        with open(signature_path, "w", encoding="utf-8") as signature_file:
+            signature_file.write(run_signature)
+
+        # Create .old files for each section.
         for i, section in enumerate(sections, start=1):
             old_filename = os.path.join(tmp_dir, f"{i}-section.old")
-            with open(old_filename, "w") as file:
-                file.write("\n".join(section))
+            with open(old_filename, "w", encoding="utf-8") as old_section_file:
+                old_section_file.write("\n".join(section))
 
         return sections
 
@@ -191,12 +96,44 @@ def split_into_sections(filename, section_size):
         raise Exception(f"Error processing document: {e}")
 
 
-def process_manuscript(filename, system_message, user_prefix):
+def _process_section(
+    tmp_dir: str,
+    old_file: str,
+    system_message: str,
+    user_prefix: str,
+    settings: dict[str, Any],
+) -> None:
+    with open(os.path.join(tmp_dir, old_file), "r", encoding="utf-8") as section_file:
+        section_text = section_file.read()
+    print(
+        f"[process_manuscript] Processing section file: {old_file} | "
+        f"Text length: {len(section_text)}"
+    )
+
+    corrected_text = communicate_with_openai(
+        section_text,
+        system_message,
+        user_prefix,
+        settings,
+    )
+
+    new_filename = os.path.join(tmp_dir, old_file.replace(".old", ".new"))
+    with open(new_filename, "w", encoding="utf-8") as new_section_file:
+        new_section_file.write(corrected_text)
+
+
+def process_manuscript(
+    filename: str,
+    system_message: str,
+    user_prefix: str,
+    settings: dict[str, Any],
+    tmp_dir: str | None = None,
+) -> list[str]:
     file = os.path.splitext(os.path.basename(filename))[0]
     print(f"[process_manuscript] Starting processing for: {filename}")
     try:
         # Directory where temporary files are stored
-        tmp_dir = f"./tmp/{file}"
+        tmp_dir = tmp_dir or f"./tmp/{file}"
 
         # Check if the directory exists
         if not os.path.exists(tmp_dir):
@@ -211,96 +148,83 @@ def process_manuscript(filename, system_message, user_prefix):
         print(f"[process_manuscript] Found {len(old_files)} .old files in {tmp_dir}")
 
         # Initialize corrected sections list
-        corrected_sections = []
+        corrected_sections: list[str] = []
 
         # Count the number of '.old' files in the './tmp' directory
         total_sections = len(old_files)
 
-        # Build a set of stems (filename without extension) for current .old files
-        old_stems = {os.path.splitext(f)[0] for f in old_files}
+        def new_path(old_file: str) -> str:
+            return os.path.join(tmp_dir, old_file.replace(".old", ".new"))
 
-        # Initialize completed_sections from any pre-existing .new files that
-        # correspond to the current set of .old files, so that resume (re-run
-        # after partial completion) works correctly even if there are stale .new files.
-        completed_sections = sum(
-            1
-            for f in os.listdir(tmp_dir)
-            if f.endswith(".new") and os.path.splitext(f)[0] in old_stems
+        # Sections that already have a .new file are resumed, not re-sent
+        pending = [f for f in old_files if not os.path.exists(new_path(f))]
+        print(
+            f"[process_manuscript] {total_sections - len(pending)} sections already "
+            f"done, {len(pending)} to send"
         )
-        # Ensure progress count never exceeds the total number of sections
-        completed_sections = min(completed_sections, total_sections)
 
-        # Process each .old file
+        if pending:
+            get_client(settings)
+            max_concurrent = settings["max_concurrent_sections"]
+            print(f"[process_manuscript] Sending up to {max_concurrent} at a time")
+            completed_sections = total_sections - len(pending)
+            with ThreadPoolExecutor(max_workers=max_concurrent) as pool:
+                futures = [
+                    pool.submit(
+                        _process_section,
+                        tmp_dir,
+                        old_file,
+                        system_message,
+                        user_prefix,
+                        settings,
+                    )
+                    for old_file in pending
+                ]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
+                        completed_sections += 1
+                        print(
+                            "[process_manuscript] Completed/Total Sections: "
+                            f"{completed_sections}/{total_sections}"
+                        )
+                    except Exception:
+                        # Unstarted sections are dropped; in-flight ones finish
+                        for other in futures:
+                            other.cancel()
+                        raise
+
         for old_file in old_files:
-            print(f"[process_manuscript] Processing section file: {old_file}")
-            new_filename = os.path.join(tmp_dir, old_file.replace(".old", ".new"))
+            with open(new_path(old_file), "r", encoding="utf-8") as new_file:
+                corrected_sections.append(new_file.read())
 
-            # Process only if .new file does not exist
-            if not os.path.exists(new_filename):
-                with open(os.path.join(tmp_dir, old_file), "r") as section_file:
-                    section_text = section_file.read()
-                print(f"[process_manuscript] Section text length: {len(section_text)}")
-
-                corrected_text = communicate_with_openai(
-                    section_text,
-                    completed_sections,
-                    total_sections,
-                    system_message,
-                    user_prefix,
-                )
-
-                # Print the corrected text before writing to file
-                print(f"[process_manuscript] Response From API:\n{corrected_text}")
-
-                with open(new_filename, "w") as new_section_file:
-                    new_section_file.write(corrected_text)
-
-                # Increment completed_sections for progress tracking, but do not
-                # allow it to exceed total_sections.
-                completed_sections = min(completed_sections + 1, total_sections)
-
-            else:
-                print(f"[process_manuscript] .new file already exists for section: {old_file}")
-                with open(new_filename, "r") as new_section_file:
-                    corrected_text = new_section_file.read()
-
-            corrected_sections.append(corrected_text)
-
-        print("Finished processing all sections.")
+        print("[process_manuscript] Finished processing all sections.")
         return corrected_sections
 
     except Exception as e:
         print(f"[process_manuscript] Exception: {e}")
-        raise Exception(f"Error processing manuscript: {e}")
+        raise
 
 
-def cleanup_temp_files(filename):
-    """Clean up temporary files for a given manuscript."""
-    file = os.path.splitext(os.path.basename(filename))[0]
-    tmp_dir = f"./tmp/{file}"
-
-    if os.path.exists(tmp_dir):
-        import shutil
-        shutil.rmtree(tmp_dir)
-        print(f"Cleaned up temporary directory: {tmp_dir}")
-
-
-def merge_groups_and_save(filename, action):
+def merge_groups_and_save(
+    filename: str,
+    action: str,
+    output_dir: str,
+    tmp_dir: str | None = None,
+    include_original: bool = True,
+) -> None:
     file = os.path.splitext(os.path.basename(filename))[0]
     try:
-        tmp_dir = f"./tmp/{file}"
-        output_dir = os.getenv("OUTPUT_DIR", "./output")
-
+        tmp_dir = tmp_dir or f"./tmp/{file}"
         # Create output directory if it doesn't exist
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
             print(f"Created output directory: {output_dir}")
 
-        # Process both .new and .old files
-        for file_type in [".new", ".old"]:
+        file_types = [".new", ".old"] if include_original else [".new"]
+        for file_type in file_types:
             prefix = f"{action.upper()}_" if file_type == ".new" else "ORIGINAL_"
             doc = Document()  # Initialize the Document outside the files loop
-            seen_h1_heading = False
 
             # Sort files by their numeric order
             files = sorted(
@@ -311,60 +235,18 @@ def merge_groups_and_save(filename, action):
             # Process files
             for file in files:
                 print(f"Processing {file}...")
-                with open(os.path.join(tmp_dir, file), "r") as section_file:
+                with open(
+                    os.path.join(tmp_dir, file), "r", encoding="utf-8"
+                ) as section_file:
                     text_content = section_file.read().splitlines()
 
-                para = None
                 for line in text_content:
                     line = line.strip()
-                    if not line:
-                        continue
-
-                    if line.startswith("<title>") and line.endswith("</title>"):
-                        line_content = replace_quotes(line[7:-8])
-                        para = doc.add_heading(line_content, level=1)
-                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        continue
-
-                    heading_match = HEADING_TAG_REGEX.fullmatch(line)
-                    if heading_match:
-                        heading_level = int(heading_match.group("level"))
-                        heading_content = heading_match.group(2)
-
-                        if heading_level == 1:
-                            if seen_h1_heading:
-                                doc.add_page_break()
-                            else:
-                                seen_h1_heading = True
-
-                        para = doc.add_heading("", level=heading_level)
-                        if heading_level == 1:
-                            para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-                        fragments = process_html_fragments(heading_content)
-                        if fragments:
-                            if para.runs:
-                                for run in para.runs:
-                                    run.text = ""
-                            add_formatted_runs(para, fragments)
-                        else:
-                            para.text = replace_quotes(heading_content)
-                        continue
-
-                    if line.startswith("<center>") and line.endswith("</center>"):
-                        line_content = line[8:-9]
-                        para = doc.add_paragraph()
-                        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                        fragments = process_html_fragments(line_content)
-                        add_formatted_runs(para, fragments)
-                        continue
-
-                    if line.startswith("<p>") and line.endswith("</p>"):
-                        line_content = line[3:-4]
-                        para = doc.add_paragraph()
-                        para.paragraph_format.first_line_indent = Inches(0.20)
-                        fragments = process_html_fragments(line_content)
-                        add_formatted_runs(para, fragments)
+                    if line:
+                        if not add_markup_line(doc, line, tmp_dir):
+                            raise ValueError(
+                                f"Unrecognized markup in {file}: {line!r}"
+                            )
 
             # Save the combined document
             combined_filename = os.path.join(
@@ -373,5 +255,7 @@ def merge_groups_and_save(filename, action):
             doc.save(combined_filename)
             print(f"Combined DOCX {combined_filename} saved.")
 
+    except ValueError:
+        raise
     except Exception as e:
         raise Exception(f"Error in document merging and saving: {e}") from e

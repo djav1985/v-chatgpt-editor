@@ -1,205 +1,88 @@
-<p align="center">
-    <img src="v-chatgpt-editor.png" align="center" width="30%">
-</p>
-<p align="center"><h1 align="center"><code>❯ v-chatgpt-editor</code></h1></p>
-<p align="center">
-	<em>Transforming Manuscripts, Empowering Creativity!</em>
-</p>
-<p align="center">
-	<!-- local repository, no metadata badges. --></p>
-<p align="center">Built with the tools and technologies:</p>
-<p align="center">
-	<img src="https://img.shields.io/badge/.ENV-ECD53F.svg?style=flat-square&logo=dotenv&logoColor=black" alt=".ENV">
-	<img src="https://img.shields.io/badge/GNU%20Bash-4EAA25.svg?style=flat-square&logo=GNU-Bash&logoColor=white" alt="GNU%20Bash">
-	<img src="https://img.shields.io/badge/Python-3776AB.svg?style=flat-square&logo=Python&logoColor=white" alt="Python">
-</p>
-<br>
+# v-chatgpt-editor
 
-## 🔗 Table of Contents
+A command-line tool for editing and translating DOCX manuscripts with OpenAI. It splits documents into paragraph-preserving sections, processes those sections, and builds a formatted DOCX output.
 
-- [🔗 Table of Contents](#-table-of-contents)
-- [📍 Overview](#-overview)
-- [👾 Features](#-features)
-- [📁 Project Structure](#-project-structure)
-        - [📂 Project Index](#-project-index)
-- [🚀 Getting Started](#-getting-started)
-        - [☑️ Prerequisites](#️-prerequisites)
-        - [⚙️ Installation](#️-installation)
-        - [🔧 Configuration](#-configuration)
-        - [🖥️ Command-Line Usage](#-command-line-usage)
-- [🤝 Contributing](#-contributing)
-- [🎗 License](#-license)
+## Features
 
----
+- Edit or translate DOCX manuscripts while preserving document formatting.
+- Set a token budget for each section; oversized paragraphs remain intact.
+- Resume section processing and build a final document from saved intermediate files.
+- Configure the OpenAI model, output directory, and section concurrency through environment variables.
 
-## 📍 Overview
+## Project layout
 
-This project streamlines the editing and translation of DOCX manuscripts, addressing the challenges of document management and content refinement. Key features include flexible API integration, section-based editing, and seamless output formatting. Ideal for writers, editors, and translators, it enhances productivity while preserving the author's voice and style.
-
----
-
-## 👾 Features
-
-- **API Integration** – `app/api.py` manages requests to OpenAI services.
-- **DOCX Processing** – `app/docx_handler.py` splits manuscripts, applies edits, and rebuilds documents.
-- **Command Interface** – `app/main.py` exposes `edit`, `translate`, `build`, and `cleanup` commands.
-
----
-
-## 📁 Project Structure
-
-```sh
-└── /
-    ├── README.md
-    ├── IMPROVEMENTS.md
-    ├── app
-    │   ├── api.py
-    │   ├── docx_handler.py
-    │   ├── main.py
-    │   ├── validate_improvements.py
-    │   ├── requirements.txt
-    │   ├── run.sh
-    │   ├── input/
-    │   ├── output/
-    │   └── .env (user-provided)
-    └── v-chatgpt-editor.png
+```text
+.
+├── app/
+│   ├── api.py              # OpenAI client and requests
+│   ├── docx_handler.py     # Split, process, and merge DOCX files
+│   ├── docx_markup.py     # Serialize and restore formatted paragraphs
+│   ├── main.py             # CLI entry point
+│   ├── token_count.py      # Model token counting
+│   ├── requirements.txt
+│   ├── run.sh              # Interactive setup and edit/translate workflow
+│   ├── input/              # Source DOCX files
+│   ├── output/             # Completed DOCX files
+│   └── tmp/                # Intermediate sections and processing state
+├── tests/                  # unittest test suite
+├── LICENSE
+└── README.md
 ```
 
+The interactive script creates `app/venv` and installs dependencies from `app/requirements.txt`. Keep API credentials in `app/.env`; do not commit that file.
 
-### 📂 Project Index
-<details open>
-  <summary><b><code>/</code></b></summary>
-  <blockquote>
-    <table>
-      <tr>
-        <td><b><a href='/IMPROVEMENTS.md'>IMPROVEMENTS.md</a></b></td>
-        <td>Summary of code quality improvements and validation steps.</td>
-      </tr>
-    </table>
-  </blockquote>
-  <details>
-    <summary><b>app</b></summary>
-    <blockquote>
-      <table>
-        <tr>
-          <td><b><a href='/app/api.py'>api.py</a></b></td>
-          <td>OpenAI API utilities.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/docx_handler.py'>docx_handler.py</a></b></td>
-          <td>DOCX splitting and merging helpers.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/main.py'>main.py</a></b></td>
-          <td>CLI entry point.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/validate_improvements.py'>validate_improvements.py</a></b></td>
-          <td>Internal validation checks.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/input/'>input/</a></b></td>
-          <td>Source manuscripts.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/output/'>output/</a></b></td>
-          <td>Processed documents.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/requirements.txt'>requirements.txt</a></b></td>
-          <td>Project dependencies.</td>
-        </tr>
-        <tr>
-          <td><b><a href='/app/run.sh'>run.sh</a></b></td>
-          <td>Interactive helper script.</td>
-        </tr>
-        <tr>
-          <td><code>.env</code></td>
-          <td>User-provided environment variables.</td>
-        </tr>
-      </table>
-    </blockquote>
-  </details>
-</details>
+## Requirements
 
----
+- Python 3
+- Bash (for the interactive script; on Windows, use Git Bash or WSL)
+- An OpenAI API key for edit and translate operations
 
-## 🚀 Getting Started
+## Setup and interactive use
 
-### ☑️ Prerequisites
+From the repository root, run:
 
-Before getting started with `v-chatgpt-editor`, ensure your runtime environment meets the following requirements:
+```sh
+bash app/run.sh
+```
 
-- **Programming Language:** Python
-- **Package Manager:** Pip
+The script installs dependencies in its virtual environment and prompts you to choose edit or translate, a DOCX file from `app/input/`, and the section token budget. Translation also prompts for a target language.
 
-### ⚙️ Installation
+## Configuration
 
-To get started with `v-chatgpt-editor`:
-
-1. Clone the repository:
-
-   ```sh
-   ❯ git clone <repository-url>
-   ```
-
-2. Navigate to the project directory:
-
-   ```sh
-   ❯ cd v-chatgpt-editor
-   ```
-
-3. Run the setup script from the repository root to install dependencies and start the app:
-
-   ```sh
-   ❯ ./app/run.sh
-   ```
-
-   The script will automatically install dependencies, and guide you through selecting options such as editing or translating documents.
-
-   > 💡 **Smoke test:** Running `./app/run.sh` from the project root confirms the helper script can locate its resources regardless of your current directory.
-
-### 🔧 Configuration
-
-Create a `.env` file in `app/` with the following variables:
+Create `app/.env` with the settings you need:
 
 ```env
-OPENAI_API_KEY=<required>
-OPENAI_PROJECT_ID=<optional project id>
-OPENAI_ORG=<optional organization>
-MODEL=gpt-4o-mini
-OUTPUT_DIR=output
+OPENAI_API_KEY=your-api-key
+OPENAI_PROJECT_ID=
+OPENAI_ORG=
+MODEL=gpt-5-mini
+MAX_CONCURRENT_SECTIONS=1
+OUTPUT_DIR=./output
 ```
 
-This file is user-provided and should not be committed to version control.
+`OPENAI_API_KEY` is required for editing and translation. `MODEL` defaults to `gpt-5-mini`, `MAX_CONCURRENT_SECTIONS` defaults to `1`, and `OUTPUT_DIR` defaults to `./output`. When running commands directly, run them from `app/` so `app/.env` is loaded and these relative paths resolve as expected.
 
-### 🖥️ Command-Line Usage
+## Command-line use
 
-Run the application directly:
+Install dependencies (or run the interactive script once), then from `app/`:
 
 ```sh
-python3 app/main.py edit path/to/file.docx
-python3 app/main.py translate path/to/file.docx
-python3 app/main.py build path/to/file.docx
-python3 app/main.py cleanup
+python main.py edit input/manuscript.docx 512
+python main.py translate input/manuscript.docx French 512
+python main.py build input/manuscript.docx --edited
+python main.py build input/manuscript.docx --language French
 ```
 
-Alternatively, use the interactive helper script:
+The `build` command rebuilds a document from existing intermediate sections; it does not require an OpenAI API key. Edit and translate commands build their output when processing completes.
+
+## Tests
+
+Install the app requirements, then run from the repository root:
 
 ```sh
-./app/run.sh
+python -m unittest discover -s tests -v
 ```
 
----
+## License
 
-## 🤝 Contributing
-
-See [IMPROVEMENTS.md](IMPROVEMENTS.md) for a summary of recent code quality improvements and validation steps. Run `python3 app/validate_improvements.py` to perform internal checks before committing changes.
-
----
-
-## 🎗 License
-
-This project is protected under the [MIT License](https://github.com/djav1985/v-chatgpt-editor/blob/main/LICENSE) License.
-
----
+MIT. See [LICENSE](LICENSE).

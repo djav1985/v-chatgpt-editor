@@ -1,5 +1,6 @@
 argparse
-python-docx
+python-docx>=1.0
 python-dotenv
 beautifulsoup4
 openai
+tiktoken

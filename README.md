@@ -84,23 +84,19 @@ v-chatgpt-editor/
 
 ### Interactive Setup
 
-Run the helper from the repository root:
+`run.sh` is an interactive wrapper for editing or translating a manuscript. Put the `.docx` files you want to process in `app/input/`, create `app/.env` with your OpenAI API key, and start the helper from the repository root:
 
 ```sh
 bash app/run.sh
 ```
 
-The script changes to the `app/` directory, so it can be launched from the repository root or another working directory. It then:
+The helper locates its own directory and switches to `app/`, so its paths do not depend on the directory you launched it from. It checks for `app/venv/`, creates the virtual environment if needed, installs the packages in `app/requirements.txt`, and activates it. Dependencies are checked with `pip` each time you start the helper.
 
-1. Creates `app/venv/` if the virtual environment is missing or incomplete.
-2. Installs or updates packages from `app/requirements.txt` and activates the environment.
-3. Prompts you to select **Edit** or **Translate**.
-4. Lists `.docx` files in `app/input/` and prompts you to choose one. It exits if none are found or the file selection is invalid.
-5. Prompts for the maximum token budget per section: `256`, `512`, `1024`, or `2048`. An invalid choice uses `256`. A paragraph larger than the selected budget is kept whole and can exceed the budget.
-6. For translation, prompts for the target language.
-7. Calls `main.py` with the selected action and options. Intermediate processing files are stored under `app/tmp/`; completed documents go to the configured output directory (default: `app/output/`).
+After setup, it asks whether to **Edit** or **Translate**, then shows the `.docx` files in `app/input/` for selection. If the directory has no Word documents, the helper stops with a message. It next asks for a section token budget of `256`, `512`, `1024`, or `2048`. This budget applies to serialized manuscript text; paragraphs are kept intact, so a long paragraph can exceed the selected budget. An unrecognized budget choice falls back to `256`.
 
-On Windows, run the helper from Git Bash or WSL. On normal completion, the script deactivates its virtual environment.
+For translation, the helper also asks for a target language. It then invokes `main.py` with the selected file and options: edit runs the editing workflow, while translate sends the target language to the translation workflow. Both workflows call the OpenAI API, save intermediate sections in a per-document workspace under `app/tmp/`, and build the final DOCX in `OUTPUT_DIR` (by default `app/output/`). Edited files are prefixed `EDITED_`; translation files use the target language as an uppercase prefix.
+
+The helper only offers edit and translate. To rebuild a document from sections that have already been processed, use the `build` command described below. The script stops if a command fails and deactivates the virtual environment after a normal run. On Windows, run it in Git Bash or WSL.
 
 ---
 

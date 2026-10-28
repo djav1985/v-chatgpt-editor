@@ -60,6 +60,9 @@ run_python_script() {
         2) # Translate
             "$VENV_DIR/bin/python" main.py translate "$filename" "$language" "$max_tokens"
         ;;
+        3) # Bible
+            "$VENV_DIR/bin/python" main.py bible "$filename"
+        ;;
         *)
             echo "Invalid action selected."
         ;;
@@ -83,11 +86,12 @@ source "$VENV_DIR/bin/activate"
 echo "Choose an action:"
 echo "1: Edit"
 echo "2: Translate"
+echo "3: Bible"
 read -r action
 
 # Process based on selected action
 case $action in
-    1|2)
+    1|2|3)
         choose_file
         filename=$(basename "$selected_file")
         # For edit and translate, choose sections

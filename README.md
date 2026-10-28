@@ -57,6 +57,7 @@ V-ChatGPT-Editor is a command-line tool for editing and translating DOCX manuscr
 v-chatgpt-editor/
 ├── app/
 │   ├── api.py              # OpenAI client and requests
+│   ├── bible.py            # Chapter story bible and consistency report
 │   ├── docx_handler.py     # DOCX splitting, processing, and merging
 │   ├── docx_markup.py      # Paragraph markup serialization and restoration
 │   ├── main.py             # Command-line entry point
@@ -92,11 +93,11 @@ bash app/run.sh
 
 The helper locates its own directory and switches to `app/`, so its paths do not depend on the directory you launched it from. It checks for `app/venv/`, creates the virtual environment if needed, installs the packages in `app/requirements.txt`, and activates it. Dependencies are checked with `pip` each time you start the helper.
 
-After setup, it asks whether to **Edit** or **Translate**, then shows the `.docx` files in `app/input/` for selection. If the directory has no Word documents, the helper stops with a message. It next asks for a section token budget of `256`, `512`, `1024`, or `2048`. This budget applies to serialized manuscript text; paragraphs are kept intact, so a long paragraph can exceed the selected budget. An unrecognized budget choice falls back to `256`.
+After setup, it asks whether to **Edit**, **Translate**, or build a **Bible**, then shows the `.docx` files in `app/input/` for selection. If the directory has no Word documents, the helper stops with a message. It next asks for a section token budget of `256`, `512`, `1024`, or `2048`. This budget applies to serialized manuscript text; paragraphs are kept intact, so a long paragraph can exceed the selected budget. An unrecognized budget choice falls back to `256`.
 
 For translation, the helper also asks for a target language. It then invokes `main.py` with the selected file and options: edit runs the editing workflow, while translate sends the target language to the translation workflow. Both workflows call the OpenAI API, save intermediate sections in a per-document workspace under `app/tmp/`, and build the final DOCX in `OUTPUT_DIR` (by default `app/output/`). Edited files are prefixed `EDITED_`; translation files use the target language as an uppercase prefix.
 
-The helper only offers edit and translate. To rebuild a document from sections that have already been processed, use the `build` command described below. The script stops if a command fails and deactivates the virtual environment after a normal run. On Windows, run it in Git Bash or WSL.
+The helper only offers edit, translate, and bible (which skips the budget and language prompts). To rebuild a document from sections that have already been processed, use the `build` command described below. The script stops if a command fails and deactivates the virtual environment after a normal run. On Windows, run it in Git Bash or WSL.
 
 ---
 
@@ -128,9 +129,14 @@ python main.py edit input/manuscript.docx 512
 python main.py translate input/manuscript.docx French 512
 python main.py build input/manuscript.docx --edited
 python main.py build input/manuscript.docx --language French
+python main.py bible input/manuscript.docx
 ```
 
 The `build` command rebuilds a document from existing intermediate sections and does not require an API key. Edit and translate commands build their output when processing completes. The interactive workflow is also available from the repository root with `bash app/run.sh`.
+
+### Story Bible and Consistency Report
+
+The `bible` command, also offered as option 3 in `run.sh`, reads the DOCX directly and does not use the intermediate section files. Each chapter starts at a Heading 1 and ends at the first page break after it; text after that page break and before the next Heading 1 is left out, and so is text before the first Heading 1. A page break in the middle of a chapter therefore cuts it short. Chapters are written to `app/tmp/BIBLE_<name>/chapterN.bible`, the model turns each into `chapterN.json`, and one final call over all of them writes `bible-report.md` listing contradictions and plot holes. The report is copied to `OUTPUT_DIR` as `BIBLE_REPORT_<name>.md`. Nothing is cached: every run rebuilds the directory. The `edit` command does not run it; the bible is only built when you ask for it.
 
 ---
 

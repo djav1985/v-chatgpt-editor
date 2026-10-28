@@ -1,11 +1,13 @@
 import argparse
 import os
 import re
+import shutil
 import sys
 from typing import Any
 
 from dotenv import load_dotenv
 
+from bible import build_bible
 from docx_handler import process_manuscript, merge_groups_and_save, split_into_sections
 from openai import (
     APIConnectionError,
@@ -72,6 +74,19 @@ def workspace_for(filename: str, language: str | None = None) -> str:
     return os.path.join("tmp", f"{prefix}_{source}")
 
 
+def run_bible(filename: str, settings: dict[str, Any]) -> str:
+    """Build the story bible and copy its report to the output directory."""
+    source = os.path.splitext(os.path.basename(filename))[0]
+    bible_dir = os.path.join("tmp", f"BIBLE_{source}")
+    print(f"Building the story bible for {filename}...")
+    report_path = build_bible(filename, bible_dir, settings)
+    os.makedirs(settings["output_dir"], exist_ok=True)
+    destination = os.path.join(settings["output_dir"], f"BIBLE_REPORT_{source}.md")
+    shutil.copyfile(report_path, destination)
+    print(f"Bible report saved to {destination}.")
+    return destination
+
+
 def main() -> None:
     # Initialize the manuscript editor and set up the command line arguments
     print("Initializing manuscript editor.")
@@ -109,6 +124,12 @@ def main() -> None:
         ),
     )
 
+    # Set up the 'bible' command
+    bible_parser = subparsers.add_parser(
+        "bible", help="Build a story bible and consistency report from a DOCX file"
+    )
+    bible_parser.add_argument("filename", type=str, help="Path to the DOCX file")
+
     # Set up the 'build' command
     build_parser = subparsers.add_parser(
         "build", help="Build a final DOCX from processed sections"
@@ -129,7 +150,7 @@ def main() -> None:
 
     try:
         # Check if the file exists for commands that require a file
-        if args.command in ["edit", "translate", "build"] and not os.path.exists(
+        if args.command in ["edit", "translate", "build", "bible"] and not os.path.exists(
             args.filename
         ):
             print(f"Error: The file {args.filename} does not exist.", file=sys.stderr)
@@ -245,6 +266,10 @@ def main() -> None:
                 include_original=False,
             )
             print("Translated manuscript saved.")
+
+        elif args.command == "bible":
+            settings = load_settings()
+            run_bible(args.filename, settings)
 
         elif args.command == "build":
             settings = load_settings(require_api=False)

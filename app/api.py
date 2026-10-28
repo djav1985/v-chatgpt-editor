@@ -1,4 +1,5 @@
 # api.py
+import json
 from threading import Lock
 from typing import Any
 
@@ -38,3 +39,29 @@ def communicate_with_openai(
     if not response.output_text:
         raise RuntimeError("OpenAI returned no message content.")
     return response.output_text
+
+
+def communicate_json(
+    text: str,
+    system_message: str,
+    schema: dict[str, Any],
+    settings: dict[str, Any],
+) -> dict[str, Any]:
+    """Request a response constrained to a JSON schema and return it parsed."""
+    response = get_client(settings).responses.create(
+        model=settings["model"],
+        instructions=system_message,
+        input=text,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "chapter_bible",
+                "schema": schema,
+                "strict": True,
+            }
+        },
+    )
+
+    if not response.output_text:
+        raise RuntimeError("OpenAI returned no message content.")
+    return json.loads(response.output_text)
